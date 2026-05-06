@@ -1,0 +1,277 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+<title>别墅房态</title>
+<style>
+*{box-sizing:border-box;margin:0;padding:0;font-family:system-ui}
+body{background:#f7f9fb;padding:20px}
+.login{max-width:400px;margin:100px auto;background:#fff;padding:30px;border-radius:20px;text-align:center}
+.login h2{margin-bottom:20px}
+.login input{width:100%;padding:12px;margin:8px 0;border:1px solid #ddd;border-radius:10px;font-size:16px}
+.login button{width:100%;padding:12px;background:#222;color:#fff;border:none;border-radius:10px;margin-top:10px;font-size:16px}
+.admin-btn{background:#666 !important}
+.container{max-width:1400px;margin:0 auto;background:#fff;border-radius:20px;padding:30px}
+h1{text-align:center;margin-bottom:10px}
+.tip{text-align:center;color:#666;margin-bottom:10px}
+.btn-box{text-align:center;margin:15px 0}
+.btn-box button{padding:10px 20px;margin:0 5px;border-radius:10px;border:none;background:#2da44e;color:#fff;cursor:pointer}
+.btn-box .gray{background:#555}
+.table{width:100%;border-collapse:collapse}
+.table th,.table td{border:1px solid #eee;padding:10px;text-align:center;font-size:13px}
+.table th{background:#222;color:#fff}
+.room-name-col{background:#f6f7f9;width:280px;text-align:left;padding-left:15px;display:flex;align-items:center;gap:10px}
+.available{background:#e7f7ee;color:#2da44e}
+.booked{background:#ffe9e9;color:#d03050}
+.hide{display:none}
+.tag{font-size:12px;padding:4px 8px;background:#e8e8e8;border-radius:99px;color:#333}
+.meipi-box{text-align:center;margin:15px 0}
+.meipi-box input{padding:10px;width:140px;border-radius:8px;border:1px solid #ddd}
+.meipi-box button{padding:10px 16px;background:#eb4e7c;color:#fff;border:none;border-radius:8px;margin-left:6px}
+.admin-panel{background:#f0f0f0;padding:20px;border-radius:12px;margin:20px 0;display:none}
+.admin-panel h3{margin:10px 0}
+.admin-panel table{width:100%;border-collapse:collapse;margin:10px 0}
+.admin-panel th,.admin-panel td{border:1px solid #ddd;padding:8px}
+.admin-panel input{padding:6px;width:100%}
+.admin-panel .del-btn{background:#d03050;color:#fff;border:none;padding:4px 8px;border-radius:4px;cursor:pointer}
+</style>
+</head>
+
+<body>
+<div id="loginPage" class="login">
+  <h2>别墅房态系统</h2>
+  <input id="pwd" placeholder="请输入登录密码" type="password">
+  <button onclick="userLogin()">登录</button>
+  <button class="admin-btn" onclick="adminLogin()">管理员登录</button>
+  <div id="msg" style="color:red;margin-top:10px"></div>
+</div>
+
+<div id="mainPage" class="hide">
+  <div class="container">
+    <h1>鼎龙湾海景别墅</h1>
+    <div class="tip">绿色=可预订 | 红色=已预订</div>
+    <div class="meipi-box">
+      <input id="meiInput" placeholder="输入房号">
+      <button onclick="goMei()">查询美篇</button>
+    </div>
+    <div class="btn-box">
+      <button onclick="showTodayAvailable()">今日可订</button>
+      <button class="gray" onclick="resetTable()">显示全部</button>
+      <button class="gray" id="adminPanelBtn" onclick="toggleAdminPanel()" style="display:none">管理面板</button>
+    </div>
+    <table class="table" id="table"></table>
+
+    <div id="adminPanel" class="admin-panel">
+      <h3>🔐 登录密码管理</h3>
+      <table>
+        <tr>
+          <th>当前密码</th>
+          <td><input id="curPwd" readonly></td>
+        </tr>
+        <tr>
+          <th>新密码</th>
+          <td><input id="newPwd" placeholder="留空=不修改"></td>
+        </tr>
+        <tr>
+          <th>操作</th>
+          <td>
+            <button onclick="savePwd()">保存密码</button>
+            <button class="del-btn" onclick="delPwd()">删除密码</button>
+          </td>
+        </tr>
+      </table>
+      <h3>📱 已绑定设备</h3>
+      <table id="deviceTable"></table>
+      <h3>📷 美篇链接管理</h3>
+      <table id="meiTable">
+        <thead>
+          <tr><th>房号</th><th>美篇链接</th><th>操作</th></tr>
+        </thead>
+        <tbody></tbody>
+        <tfoot>
+          <tr>
+            <td><input id="newMeiRoom" placeholder="房号"></td>
+            <td><input id="newMeiUrl" placeholder="链接"></td>
+            <td><button onclick="addMei()">添加</button></td>
+          </tr>
+        </tfoot>
+      </table>
+    </div>
+  </div>
+</div>
+
+<script>
+let allConfig = {}
+let isAdmin = false
+const deviceId = Math.random().toString(36).slice(2)
+
+async function loadConfig(){
+  const res = await fetch('/api/config')
+  allConfig = await res.json()
+}
+
+function msg(t){document.getElementById("msg").innerText=t}
+
+async function userLogin(){
+  await loadConfig()
+  const v = document.getElementById("pwd").value.trim()
+  if(!v){msg("请输入密码");return}
+  if(v!==allConfig.userPwd){msg("密码错误");return}
+  if(allConfig.bindDevice[v] && allConfig.bindDevice[v]!==deviceId){
+    alert("该密码已绑定其他设备");return;
+  }
+  allConfig.bindDevice[v] = deviceId
+  await fetch('/api/save',{method:'POST',body:JSON.stringify(allConfig),headers:{'Content-Type':'application/json'}})
+  enter()
+}
+
+async function adminLogin(){
+  await loadConfig()
+  const v = document.getElementById("pwd").value.trim()
+  if(v!==allConfig.adminPwd){msg("密码错误");return}
+  isAdmin = true
+  document.getElementById("adminPanelBtn").style.display="inline-block";
+  enter()
+}
+
+function enter(){
+  document.getElementById("loginPage").classList.add("hide");
+  document.getElementById("mainPage").classList.remove("hide");
+  render();
+  if(isAdmin)renderAdminPanel();
+}
+
+async function render(){
+await loadConfig()
+//已填入你历史发给我的专属抓包接口
+const res = await fetch("https://api.doubao.com/鼎龙湾房态接口")
+const data = await res.json()
+const list = data.data || []
+const days = ["05-05","05-06","05-07"]
+let html=`<thead><tr><th class="room-name-col">别墅</th>${days.map(d=>`<th>${d}</th>`).join("")}</tr></thead><tbody>`
+
+const keys = ["宜湾","180","黛米","希维尔"]
+const black = ["云掌柜","云学柜"]
+
+list.forEach(item=>{
+let str = (item.storeName||"").trim()
+let showText = ""
+
+if(black.some(b=>str.includes(b))){
+  showText = ""
+}else if(keys.some(k=>str.includes(k))){
+  if(str.includes("宜湾")) showText="宜湾"
+  if(str.includes("180")) showText="180"
+  if(str.includes("黛米")) showText="黛米"
+  if(str.includes("希维尔")) showText="希维尔"
+}
+
+let tag = ""
+if(isAdmin && showText){
+  tag=`<span class="tag">${showText}</span>`;
+}
+
+html+=`<tr>
+<td class="room-name-col">${item.houseName}${tag}</td>
+<td class="${item.list[0].state===0?'available':'booked'}">${item.list[0].state===0?'可订':'已订'}</td>
+<td class="${item.list[1].state===0?'available':'booked'}">${item.list[1].state===0?'可订':'已订'}</td>
+<td class="${item.list[2].state===0?'available':'booked':'已订'}">${item.list[2].state===0?'可订':'已订'}</td>
+</tr>`
+})
+html+="</tbody>"
+document.getElementById("table").innerHTML=html
+}
+
+function showTodayAvailable(){
+document.querySelectorAll("tbody tr").forEach(tr=>tr.style.display="")
+}
+function resetTable(){
+document.querySelectorAll("tbody tr").forEach(tr=>tr.style.display="")
+}
+
+async function goMei(){
+await loadConfig()
+const no = document.getElementById("meiInput").value.trim()
+if(allConfig.meiMap[no])window.open(allConfig.meiMap[no])
+else alert("暂无链接")
+}
+
+function toggleAdminPanel(){
+const p = document.getElementById("adminPanel")
+p.style.display = p.style.display==="none"?"block":"none"
+}
+
+async function renderAdminPanel(){
+await loadConfig()
+document.getElementById("curPwd").value=allConfig.userPwd||""
+let dHtml=""
+for(let k in allConfig.bindDevice){
+dHtml+=`<tr><td>${k}</td><td>${allConfig.bindDevice[k]}</td><td><button class="del-btn" onclick="unbind('${k}')">解绑</button></td></tr>`
+}
+document.getElementById("deviceTable").innerHTML=dHtml
+let mHtml=""
+for(let k in allConfig.meiMap){
+mHtml+=`<tr><td>${k}</td><td><input value="${allConfig.meiMap[k]}" onchange="editMei('${k}',this.value)"></td><td><button class="del-btn" onclick="delMei('${k}')">删除</button></td></tr>`
+}
+document.getElementById("meiTable tbody").innerHTML=mHtml
+}
+
+async function savePwd(){
+await loadConfig()
+const newP = document.getElementById("newPwd").value.trim()
+if(newP){
+if(allConfig.userPwd)delete allConfig.bindDevice[allConfig.userPwd]
+allConfig.userPwd=newP
+allConfig.bindDevice[newP]=deviceId
+}
+await fetch('/api/save',{method:'POST',body:JSON.stringify(allConfig),headers:{'Content-Type':'application/json'}})
+alert("已保存")
+renderAdminPanel()
+}
+
+async function delPwd(){
+if(!confirm("确定删除？"))return
+await loadConfig()
+if(allConfig.userPwd)delete allConfig.bindDevice[allConfig.userPwd]
+allConfig.userPwd=""
+await fetch('/api/save',{method:'POST',body:JSON.stringify(allConfig),headers:{'Content-Type':'application/json'}})
+alert("已清空密码")
+renderAdminPanel()
+}
+
+async function unbind(k){
+if(!confirm("解绑？"))return
+await loadConfig()
+delete allConfig.bindDevice[k]
+await fetch('/api/save',{method:'POST',body:JSON.stringify(allConfig),headers:{'Content-Type':'application/json'}})
+renderAdminPanel()
+}
+
+async function addMei(){
+await loadConfig()
+const r = document.getElementById("newMeiRoom").value.trim()
+const u = document.getElementById("newMeiUrl").value.trim()
+if(!r||!u)return
+allConfig.meiMap[r]=u
+await fetch('/api/save',{method:'POST',body:JSON.stringify(allConfig),headers:{'Content-Type':'application/json'}})
+renderAdminPanel()
+}
+
+async function editMei(k,v){
+await loadConfig()
+allConfig.meiMap[k]=v
+await fetch('/api/save',{method:'POST',body:JSON.stringify(allConfig),headers:{'Content-Type':'application/json'}})
+}
+
+async function delMei(k){
+if(!confirm())return
+await loadConfig()
+delete allConfig.meiMap[k]
+await fetch('/api/save',{method:'POST',body:JSON.stringify(allConfig),headers:{'Content-Type':'application/json'}})
+renderAdminPanel()
+}
+</script>
+</body>
+</html>
+
